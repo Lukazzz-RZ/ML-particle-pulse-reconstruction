@@ -7,7 +7,7 @@ This project addresses the reconstruction of detector events from digitized wave
 The pipeline combines:
 
 - synthetic detector-like signal generation,
-- fixed and variable transfer-function modeling,
+- variable transfer-function modeling,
 - Transformer-based regression,
 - post-prediction numerical refinement,
 - ROOT waveform reading,
@@ -24,11 +24,10 @@ The project is designed as an applied machine learning workflow for particle-det
 - [Repository Structure](#repository-structure)
 - [Signal Model](#signal-model)
 - [Synthetic Data Generation](#synthetic-data-generation)
-- [Fixed Transfer Function Approach](#fixed-transfer-function-approach)
 - [Variable Transfer Function Problem](#variable-transfer-function-problem)
 - [Encoder-Decoder-Regressor Baseline](#encoder-decoder-regressor-baseline)
 - [Transformer Specialist Model](#transformer-specialist-model)
-- [Output Activations](#output-activations)
+- [Output Constraints](#output-constraints)
 - [Post-Prediction Refinement](#post-prediction-refinement)
 - [Results](#results)
 - [ROOT Data Reading](#root-data-reading)
@@ -36,6 +35,7 @@ The project is designed as an applied machine learning workflow for particle-det
 - [How to Run](#how-to-run)
 - [Requirements](#requirements)
 - [Suggested Workflow](#suggested-workflow)
+- [Future Work](#future-work)
 - [Main Concepts](#main-concepts)
 - [Notes](#notes)
 - [Figure List](#figure-list)
@@ -109,22 +109,17 @@ ml-particle-pulse-reconstruction/
 │   └── transformer_10_25_5perc.keras
 │
 ├── figures/
-│   ├── activation_clip_t0.png
-│   ├── activation_sigmoid_ab.png
-│   ├── activation_softmax_amplitude.png
 │   ├── convolved_signal_problem.png
 │   ├── decoder.png
 │   ├── edr_decoder.png
 │   ├── edr_encoder.png
 │   ├── encoder.png
-│   ├── fixed_transfer_linear_fit.png
 │   ├── legend_layers.png
 │   ├── post_prediction_refinement.png
 │   ├── transformer_legend.png
 │   ├── transformer_results_ab.png
 │   ├── transformer_results_errors.png
-│   ├── transformer_shared_encoder.png
-│   └── transformer_specialist_branches.png
+│   └── transformer_shared_encoder.png
 │
 ├── data/
 ├── results/
@@ -185,30 +180,9 @@ This synthetic approach makes it possible to train supervised models even when m
 
 ---
 
-## Fixed Transfer Function Approach
-
-The first approach assumes that the detector transfer function is fixed and known.
-
-Under this approximation, the problem can be transformed into a linear least-squares fit. The pulse positions are searched inside a compact region around an initial estimate, and the amplitudes can be recovered efficiently.
-
-![Fixed transfer function fit](figures/fixed_transfer_linear_fit.png)
-
-This approach has two main advantages:
-
-- high precision when the transfer function is known,
-- low computational cost, dominated by least-squares fitting.
-
-However, it also has important limitations:
-
-- assuming a perfectly known transfer function may be unrealistic,
-- the method can be sensitive to noise,
-- it becomes less robust when pulse shapes vary between events.
-
----
-
 ## Variable Transfer Function Problem
 
-The more realistic case allows the transfer-function parameters to vary.
+The realistic case allows the transfer-function parameters to vary.
 
 Instead of estimating only:
 
@@ -224,9 +198,7 @@ a, b
 
 This makes the problem nonlinear.
 
-A simple least-squares formulation is no longer sufficient because the shape parameters cannot be directly solved as linear coefficients.
-
-This motivates the use of neural networks.
+A simple least-squares formulation is no longer sufficient because the shape parameters cannot be directly solved as linear coefficients. This motivates the use of neural networks.
 
 ---
 
@@ -264,8 +236,6 @@ Then, different prediction branches specialize in different output quantities:
 - amplitudes `A`,
 - transfer-function coefficients `a` and `b`.
 
-![Transformer specialist branches](figures/transformer_specialist_branches.png)
-
 This design is motivated by the fact that different pulse parameters have different numerical behavior. Pulse times are bounded, amplitudes must remain positive, and shape parameters vary within a relatively narrow interval.
 
 The architecture includes:
@@ -289,25 +259,27 @@ Layer legend:
 
 ![Layer legend](figures/legend_layers.png)
 
+Transformer branch legend:
+
+![Transformer legend](figures/transformer_legend.png)
+
 ---
 
-## Output Activations
+## Output Constraints
 
-Different output variables require different activation strategies.
+Different output variables require different constraints.
 
-For pulse times, a clipped activation is used to keep predictions inside the physically allowed time window.
+Pulse times are constrained so that predictions remain inside the physically meaningful time window:
 
-![Clip activation](figures/activation_clip_t0.png)
+```text
+T_MIN <= t0 <= T_MAX
+```
 
-For amplitudes, a softmax-like activation distributes the total predicted amplitude among candidate pulses.
+Amplitudes are handled with a softmax-like normalization, which distributes the total predicted amplitude among candidate pulses.
 
-![Softmax activation](figures/activation_softmax_amplitude.png)
+The transfer-function parameters `a` and `b` are mapped with sigmoid-based activations, since they are expected to vary inside a narrow interval.
 
-For transfer-function parameters such as `a` and `b`, sigmoid activations are used because these coefficients vary inside a narrow interval.
-
-![Sigmoid activation](figures/activation_sigmoid_ab.png)
-
-This output design helps constrain the model to physically meaningful predictions.
+This output design keeps the model predictions physically constrained and reduces the number of invalid reconstructions.
 
 ---
 
@@ -535,20 +507,15 @@ The README expects the following files inside the `figures/` folder:
 
 ```text
 figures/
-├── activation_clip_t0.png
-├── activation_sigmoid_ab.png
-├── activation_softmax_amplitude.png
 ├── convolved_signal_problem.png
 ├── decoder.png
 ├── edr_decoder.png
 ├── edr_encoder.png
 ├── encoder.png
-├── fixed_transfer_linear_fit.png
 ├── legend_layers.png
 ├── post_prediction_refinement.png
 ├── transformer_legend.png
 ├── transformer_results_ab.png
 ├── transformer_results_errors.png
-├── transformer_shared_encoder.png
-└── transformer_specialist_branches.png
+└── transformer_shared_encoder.png
 ```
