@@ -1,19 +1,19 @@
 # ML Particle Pulse Reconstruction
 
-Machine-learning pipeline for pulse reconstruction and deconvolution in Micromegas particle detector signals.
+Machine-learning pipeline for signal deconvolution and pulse reconstruction in Micromegas particle detector waveforms.
 
-This project addresses the reconstruction of detector events from digitized waveforms where multiple pulses may overlap in time. The goal is to recover the underlying event parameters, such as arrival times, amplitudes, and transfer-function coefficients, from convoluted detector signals.
+This project studies how to reconstruct detector events from digitized signals where several pulses may overlap in time. The work starts from a simple fixed-transfer-function approximation, solves that case with least squares, and then moves toward a more realistic variable-transfer-function scenario where machine learning becomes necessary.
 
-The pipeline combines:
+The final approach combines:
 
 - synthetic detector-like signal generation,
-- variable transfer-function modeling,
-- Transformer-based regression,
+- fixed-transfer-function least-squares reconstruction,
+- variable-transfer-function modeling,
+- Encoder-Decoder-Regressor neural networks,
+- a specialist Transformer-based architecture,
+- constrained output activations,
 - post-prediction numerical refinement,
-- ROOT waveform reading,
-- visualization and reconstruction analysis.
-
-The project is designed as an applied machine learning workflow for particle-detector signal processing.
+- ROOT waveform reading.
 
 ---
 
@@ -24,12 +24,15 @@ The project is designed as an applied machine learning workflow for particle-det
 - [Repository Structure](#repository-structure)
 - [Signal Model](#signal-model)
 - [Synthetic Data Generation](#synthetic-data-generation)
-- [Variable Transfer Function Problem](#variable-transfer-function-problem)
-- [Encoder-Decoder-Regressor Baseline](#encoder-decoder-regressor-baseline)
-- [Transformer Specialist Model](#transformer-specialist-model)
-- [Output Constraints](#output-constraints)
+- [Fixed Transfer Function](#fixed-transfer-function)
+- [Fixed-Function Results](#fixed-function-results)
+- [Variable Transfer Function](#variable-transfer-function)
+- [Encoder-Decoder-Regressor Model](#encoder-decoder-regressor-model)
+- [EDR Results](#edr-results)
+- [Specialist Transformer Model](#specialist-transformer-model)
+- [Output Activations](#output-activations)
 - [Post-Prediction Refinement](#post-prediction-refinement)
-- [Results](#results)
+- [Transformer Results](#transformer-results)
 - [ROOT Data Reading](#root-data-reading)
 - [Pretrained Models](#pretrained-models)
 - [How to Run](#how-to-run)
@@ -44,48 +47,56 @@ The project is designed as an applied machine learning workflow for particle-det
 
 ## Overview
 
-In many particle-detector systems, the measured waveform is not a single isolated pulse. Instead, the signal can be a superposition of several detector responses arriving at different times and with different amplitudes.
+In many detector systems, the measured waveform is not a direct list of individual physical events. Instead, each event produces a detector response, and the recorded signal is the convolution of the underlying event sequence with the detector transfer function.
 
-This project treats pulse reconstruction as a supervised machine learning and deconvolution problem.
+When several events occur close in time, their responses overlap. A single visible peak may therefore correspond to more than one physical event.
 
-The main objective is to recover pulse parameters such as:
+The goal of this project is to reconstruct the hidden event parameters from the measured waveform.
+
+The reconstructed quantities are mainly:
 
 ```text
-arrival time
-amplitude
-transfer-function shape parameters
+t0  event arrival time
+A   event amplitude
+a   transfer-function decay parameter
+b   transfer-function shape parameter
 ```
 
-from sampled waveforms.
+The project is organized as a progression of methods:
 
-The final approach combines a Transformer-based neural network with a numerical refinement stage.
+```text
+fixed transfer function
+        ↓
+least-squares deconvolution
+        ↓
+variable transfer function
+        ↓
+Encoder-Decoder-Regressor
+        ↓
+specialist Transformer model
+        ↓
+post-prediction numerical refinement
+```
 
 ---
 
 ## Detector Context
 
-Micromegas detectors produce digitized electronic signals associated with particle interactions. In realistic acquisition conditions, several physical events can produce overlapping pulses in the same measured waveform.
+Micromegas detectors produce digitized electronic signals associated with particle interactions. In realistic acquisition conditions, multiple events can contribute to the same measured waveform.
 
-This makes direct event reconstruction difficult because a single visible peak may correspond to multiple underlying pulses.
-
-The reconstruction task can be understood as:
+This creates a deconvolution problem:
 
 ```text
-measured waveform = detector response * event sequence + noise
+measured signal = detector response * event sequence + noise
 ```
 
-The objective is to infer the hidden event sequence from the measured waveform.
+The objective is to infer the original events from the convoluted detector signal.
 
 ![Convolved signal problem](figures/convolved_signal_problem.png)
 
-Each event is represented by a pulse with:
+A reconstructed event sequence should identify where the underlying pulses are located and estimate their amplitudes.
 
-```text
-t0  arrival time
-A   amplitude
-a   response decay coefficient
-b   response shape coefficient
-```
+![Objective signal and events](figures/objective_signal_events.png)
 
 ---
 
@@ -109,17 +120,27 @@ ml-particle-pulse-reconstruction/
 │   └── transformer_10_25_5perc.keras
 │
 ├── figures/
+│   ├── activation_clip_t0.png
+│   ├── activation_sigmoid_ab.png
+│   ├── activation_softmax_amplitude.png
 │   ├── convolved_signal_problem.png
-│   ├── decoder.png
 │   ├── edr_decoder.png
 │   ├── edr_encoder.png
-│   ├── encoder.png
-│   ├── legend_layers.png
-│   ├── post_prediction_refinement.png
-│   ├── transformer_legend.png
-│   ├── transformer_results_ab.png
-│   ├── transformer_results_errors.png
-│   └── transformer_shared_encoder.png
+│   ├── edr_fixed_class_accuracy.png
+│   ├── edr_fixed_delta_count_error.png
+│   ├── edr_variable_confusion_matrix.png
+│   ├── edr_variable_delta_count_error.png
+│   ├── fixed_single_delta_fit.png
+│   ├── fixed_transfer_amplitude_error.png
+│   ├── fixed_transfer_time_error.png
+│   ├── objective_signal_events.png
+│   ├── transformer_ab_branch.png
+│   ├── transformer_amplitude_branch.png
+│   ├── transformer_coefficient_results.png
+│   ├── transformer_error_summary.png
+│   ├── transformer_layer_legend.png
+│   ├── transformer_shared_block.png
+│   └── transformer_t0_branch.png
 │
 ├── data/
 ├── results/
@@ -132,25 +153,25 @@ ml-particle-pulse-reconstruction/
 
 ## Signal Model
 
-The simulated waveform is built as a sum of shifted detector responses.
+The detector signal is modeled as a sum of shifted detector responses.
 
-Each pulse is described by:
+Each event is represented by:
 
 ```text
 t0  arrival time
 A   amplitude
 C   global scale
-a   exponential decay parameter
-b   power-law shape parameter
+a   decay coefficient
+b   shape coefficient
 ```
 
-The detector response is modeled as a causal transfer function:
+The transfer function has the form:
 
 ```text
 H(t) = C exp(-a t) t^b sin(t)
 ```
 
-with time scaling and clipping so that the response is zero before the pulse arrival.
+with causal clipping so that the response is zero before the event arrival.
 
 The full signal is:
 
@@ -158,171 +179,271 @@ The full signal is:
 S(t) = sum_i A_i H(t - t0_i; a_i, b_i, C_i) + noise
 ```
 
-This creates a controlled environment for testing pulse reconstruction algorithms.
+This synthetic setup provides labeled data where the true event parameters are known.
 
 ---
 
 ## Synthetic Data Generation
 
-The script `src/signal_generator.py` generates labeled synthetic signals.
+The script `src/signal_generator.py` generates labeled detector-like signals.
 
-It creates random pulse configurations with:
+The generated dataset includes:
 
-- random arrival times,
+- random number of pulses,
+- random event times,
 - random amplitudes,
-- variable transfer-function parameters,
-- optional additive noise,
-- fixed signal length of 512 samples.
+- fixed or variable response parameters,
+- optional noise,
+- fixed waveform length of 512 samples.
 
-The labels contain pulse times, amplitudes, and response parameters. Padding values are used when the number of pulses is smaller than the maximum allowed number.
+The synthetic generation step is important because it provides supervised labels for a problem where real detector labels may be difficult to obtain.
 
-This synthetic approach makes it possible to train supervised models even when manually labeled detector data are not available.
+Training data is generated at runtime, so no external dataset is required for the synthetic training pipeline.
 
 ---
 
-## Variable Transfer Function Problem
+## Fixed Transfer Function
 
-The realistic case allows the transfer-function parameters to vary.
+The first stage assumes that the detector transfer function is fixed and known.
 
-Instead of estimating only:
+Under this assumption, the problem becomes much simpler. A first fit assuming a single event is used to estimate the center and scale of the group of pulses.
+
+![Fixed single-delta fit](figures/fixed_single_delta_fit.png)
+
+Once a compact time window is defined, the problem can be written as a linear system:
+
+```text
+M A ≈ Y
+```
+
+where:
+
+- `Y` is the measured waveform,
+- `M` contains shifted copies of the known transfer function,
+- `A` contains the unknown pulse amplitudes.
+
+This can be solved efficiently using least squares.
+
+The fixed-transfer-function case is therefore not a machine learning problem. It is a classical deconvolution baseline.
+
+---
+
+## Fixed-Function Results
+
+For the fixed transfer function, the reconstruction can be solved with high precision.
+
+The timing reconstruction error is essentially negligible in the controlled synthetic scenario.
+
+![Fixed transfer timing error](figures/fixed_transfer_time_error.png)
+
+The amplitude reconstruction error is also very small.
+
+![Fixed transfer amplitude error](figures/fixed_transfer_amplitude_error.png)
+
+This method has clear advantages:
+
+- very accurate under ideal assumptions,
+- computationally cheap,
+- solved in one least-squares step.
+
+However, it also has limitations:
+
+- the detector response must be known,
+- it is sensitive to noise,
+- it does not handle event-dependent variations in the transfer function.
+
+This motivates the next stage of the project.
+
+---
+
+## Variable Transfer Function
+
+In the more realistic scenario, the transfer-function parameters are no longer fixed.
+
+The unknowns are no longer only:
 
 ```text
 t0, A
 ```
 
-the model must also estimate:
+but also:
 
 ```text
 a, b
 ```
 
-This makes the problem nonlinear.
+For `N` events, the number of unknowns increases significantly.
 
-A simple least-squares formulation is no longer sufficient because the shape parameters cannot be directly solved as linear coefficients. This motivates the use of neural networks.
+The problem can no longer be solved directly by ordinary least squares because the signal is nonlinear in the response parameters `a` and `b`.
+
+Attempts to linearize the problem through a Taylor expansion lead to poorly conditioned systems.
+
+For this reason, the variable-transfer-function problem is approached using neural networks.
 
 ---
 
-## Encoder-Decoder-Regressor Baseline
+## Encoder-Decoder-Regressor Model
 
-An initial neural approach is based on an Encoder-Decoder-Regressor architecture.
+The first neural approach is an Encoder-Decoder-Regressor model.
 
-The encoder compresses the input waveform into a smaller latent representation.
+The encoder compresses the original waveform into a lower-dimensional representation.
 
 ![EDR encoder](figures/edr_encoder.png)
 
-The decoder reconstructs the compressed representation, forming an autoencoder together with the encoder.
+The decoder reconstructs the compressed signal, forming an autoencoder together with the encoder.
 
 ![EDR decoder](figures/edr_decoder.png)
 
-A regression head then attempts to extract the target pulse parameters from the latent representation.
+A regression head then uses the latent representation to predict the event parameters.
 
-This approach works reasonably well for simpler scenarios, but becomes less reliable when the transfer-function parameters vary and several overlapping events must be reconstructed.
-
-The model tends to predict the maximum allowed number of pulses, which motivates a more specialized architecture.
+This model is useful as a first ML baseline because it tests whether a compressed waveform representation contains enough information to reconstruct the hidden pulses.
 
 ---
 
-## Transformer Specialist Model
+## EDR Results
+
+The EDR model is first tested in a simpler scenario with fixed `a` and `b`.
+
+For this case, the model performs reasonably well.
+
+![EDR fixed delta count error](figures/edr_fixed_delta_count_error.png)
+
+The class-wise behavior gives additional information about how well the model predicts the number of events.
+
+![EDR fixed class accuracy](figures/edr_fixed_class_accuracy.png)
+
+However, when the transfer-function parameters are allowed to vary, the EDR approach becomes less reliable.
+
+![EDR variable delta count error](figures/edr_variable_delta_count_error.png)
+
+In the variable-transfer-function case, the model tends to predict the maximum allowed number of pulses. This behavior suggests that a more specialized architecture is needed.
+
+![EDR variable confusion matrix](figures/edr_variable_confusion_matrix.png)
+
+This leads to the development of the specialist Transformer model.
+
+---
+
+## Specialist Transformer Model
 
 The final approach uses a specialist Transformer-like architecture.
 
-The model starts with a shared encoding block that processes the full waveform and extracts a compact representation of the signal.
+The idea is to start from a shared waveform encoder and then separate the prediction into specialized branches.
 
-![Transformer shared encoder](figures/transformer_shared_encoder.png)
+The shared block processes the input signal and extracts a common representation.
 
-Then, different prediction branches specialize in different output quantities:
+![Transformer shared block](figures/transformer_shared_block.png)
 
-- arrival times `t0`,
-- amplitudes `A`,
-- transfer-function coefficients `a` and `b`.
+The layer legend for the architecture diagrams is:
 
-This design is motivated by the fact that different pulse parameters have different numerical behavior. Pulse times are bounded, amplitudes must remain positive, and shape parameters vary within a relatively narrow interval.
+![Transformer layer legend](figures/transformer_layer_legend.png)
 
-The architecture includes:
+The model then separates the prediction into branches.
 
-- Conv1D feature extraction,
-- dilated convolution,
-- multi-head attention,
-- residual feed-forward blocks,
-- global pooling,
-- auxiliary inputs,
-- bidirectional LSTM layers,
-- constrained output heads.
+### Time branch
 
-Additional architecture diagrams:
+The `t0` branch focuses on event arrival times.
 
-![Encoder architecture](figures/encoder.png)
+![Transformer t0 branch](figures/transformer_t0_branch.png)
 
-![Decoder architecture](figures/decoder.png)
+### Amplitude branch
 
-Layer legend:
+The amplitude branch predicts how the total signal amplitude is distributed across candidate pulses.
 
-![Layer legend](figures/legend_layers.png)
+![Transformer amplitude branch](figures/transformer_amplitude_branch.png)
 
-Transformer branch legend:
+### Shape-parameter branch
 
-![Transformer legend](figures/transformer_legend.png)
+The `a,b` branch predicts the transfer-function coefficients.
+
+![Transformer ab branch](figures/transformer_ab_branch.png)
+
+This specialist design is motivated by the fact that each output group has different numerical constraints and different physical meaning.
 
 ---
 
-## Output Constraints
+## Output Activations
 
-Different output variables require different constraints.
+Different predicted variables require different activation functions.
 
-Pulse times are constrained so that predictions remain inside the physically meaningful time window:
+### Arrival times
+
+Pulse times are constrained to a physical time window:
 
 ```text
 T_MIN <= t0 <= T_MAX
 ```
 
-Amplitudes are handled with a softmax-like normalization, which distributes the total predicted amplitude among candidate pulses.
+This is implemented using a clipped activation.
 
-The transfer-function parameters `a` and `b` are mapped with sigmoid-based activations, since they are expected to vary inside a narrow interval.
+![Clip activation](figures/activation_clip_t0.png)
 
-This output design keeps the model predictions physically constrained and reduces the number of invalid reconstructions.
+### Amplitudes
+
+Amplitudes are positive and must be distributed among candidate pulses.
+
+A softmax-like activation is used to assign relative amplitude weights.
+
+![Softmax activation](figures/activation_softmax_amplitude.png)
+
+### Transfer-function parameters
+
+The coefficients `a` and `b` vary in a small controlled interval.
+
+A sigmoid-based activation is appropriate because it maps outputs smoothly into a bounded range.
+
+![Sigmoid activation](figures/activation_sigmoid_ab.png)
+
+These constraints keep the predictions inside physically meaningful regions and reduce invalid reconstructions.
 
 ---
 
 ## Post-Prediction Refinement
 
-The neural network prediction is used as an initial estimate.
+The Transformer output is used as an initial estimate, not as the final reconstruction.
 
-A nonlinear numerical refinement stage is then applied to improve the reconstructed parameters.
+A nonlinear refinement step is applied after prediction.
 
 The refinement alternates between parameter groups:
 
 ```text
-1. fix two groups of parameters
-2. optimize the remaining group
-3. repeat for another group
-4. iterate until convergence
+1. Fix two parameter groups.
+2. Fit the remaining group.
+3. Repeat the process for another group.
+4. Iterate until convergence.
 ```
 
-![Post-prediction refinement](figures/post_prediction_refinement.png)
+This allows the neural network to provide a good starting point while numerical optimization improves the final fit.
 
-This hybrid approach combines the speed of neural prediction with the accuracy of numerical optimization.
+This hybrid approach is useful because the neural network captures the global structure of the signal, while least-squares refinement improves local parameter consistency.
 
 ---
 
-## Results
+## Transformer Results
 
-The Transformer-based model is tested on synthetic signals containing up to 10 possible pulses.
+The Transformer model is tested with:
 
-The model achieves good reconstruction of the transfer-function coefficients `a` and `b`.
+```text
+N_max = 10
+```
 
-![Transformer coefficient results](figures/transformer_results_ab.png)
+The prediction errors for time and amplitude are analyzed signal by signal.
 
-The timing error remains relatively small, while amplitude reconstruction becomes the main bottleneck of the refinement pipeline.
+![Transformer error summary](figures/transformer_error_summary.png)
 
-![Transformer reconstruction errors](figures/transformer_results_errors.png)
+The results show that timing reconstruction is accurate, while amplitude reconstruction remains more difficult.
 
-The main observed behavior is:
+The transfer-function coefficients `a` and `b` are reconstructed with small residuals.
+
+![Transformer coefficient results](figures/transformer_coefficient_results.png)
+
+The main result is:
 
 ```text
 Delta t < 0.6 samples per pulse
 ```
 
-while the amplitude error remains larger and is identified as the main limitation of the current approach.
+while the amplitude error is identified as the main bottleneck of the current pipeline.
 
 ---
 
@@ -340,9 +461,9 @@ signal_values
 
 and reconstructs channel-wise sampled waveforms.
 
-This part is useful for connecting the synthetic reconstruction pipeline with real or detector-simulation data stored in ROOT format.
+This part connects the synthetic reconstruction pipeline with ROOT-based detector data.
 
-ROOT files are not included in this repository.
+ROOT files are not included in the repository.
 
 ---
 
@@ -447,12 +568,14 @@ pip install -r requirements.txt
 A typical workflow is:
 
 ```text
-1. Generate synthetic labeled signals.
-2. Train the Transformer-based model.
-3. Predict pulse parameters on test signals.
-4. Refine predictions with least-squares optimization.
-5. Compare reconstructed pulses with ground truth.
-6. Apply the same pipeline to ROOT-based detector signals.
+1. Generate synthetic detector-like signals.
+2. Solve the fixed-transfer-function case as a least-squares baseline.
+3. Move to variable transfer functions.
+4. Train the EDR model as a first ML approach.
+5. Train the specialist Transformer model.
+6. Refine predictions with nonlinear optimization.
+7. Compare reconstructed parameters with ground truth.
+8. Optionally read ROOT detector waveforms.
 ```
 
 ---
@@ -463,10 +586,10 @@ Possible improvements include:
 
 - testing alternative activation functions for amplitude prediction,
 - adding a dedicated head to predict the number of pulses,
-- improving the post-processing and numerical refinement stage,
+- improving the post-processing and refinement stage,
 - defining confidence intervals for `a`, `b`, and `t0`,
-- applying the pipeline to larger sets of ROOT detector waveforms,
-- comparing the model against classical sparse deconvolution methods.
+- applying the pipeline to larger ROOT-based detector samples,
+- comparing against sparse deconvolution methods.
 
 ---
 
@@ -477,25 +600,24 @@ This project covers:
 - applied machine learning for detector signals,
 - Micromegas detector waveform reconstruction,
 - pulse deconvolution,
-- synthetic signal generation,
+- fixed-transfer-function least-squares reconstruction,
+- variable-transfer-function modeling,
+- Encoder-Decoder-Regressor networks,
 - Transformer-based regression,
-- Conv1D feature extraction,
-- multi-head attention,
-- bidirectional recurrent layers,
 - constrained neural outputs,
-- numerical least-squares refinement,
-- ROOT data reading,
-- particle-detector signal processing.
+- synthetic data generation,
+- numerical post-processing,
+- ROOT waveform reading.
 
 ---
 
 ## Notes
 
-This repository is intended as an applied machine learning and signal processing project.
+This repository is intended as an applied machine learning and detector-signal-processing project.
 
-The goal is not to provide a final production-ready reconstruction framework, but to explore a hybrid reconstruction method combining neural networks and numerical optimization.
+The goal is not to provide a final production reconstruction framework, but to explore a complete reconstruction workflow from classical deconvolution to neural-network-based reconstruction.
 
-Training data is generated synthetically at runtime, so no external dataset is required to train the model.
+Training data is generated synthetically at runtime.
 
 Large ROOT datasets are not included in the repository.
 
@@ -507,15 +629,25 @@ The README expects the following files inside the `figures/` folder:
 
 ```text
 figures/
+├── activation_clip_t0.png
+├── activation_sigmoid_ab.png
+├── activation_softmax_amplitude.png
 ├── convolved_signal_problem.png
-├── decoder.png
 ├── edr_decoder.png
 ├── edr_encoder.png
-├── encoder.png
-├── legend_layers.png
-├── post_prediction_refinement.png
-├── transformer_legend.png
-├── transformer_results_ab.png
-├── transformer_results_errors.png
-└── transformer_shared_encoder.png
+├── edr_fixed_class_accuracy.png
+├── edr_fixed_delta_count_error.png
+├── edr_variable_confusion_matrix.png
+├── edr_variable_delta_count_error.png
+├── fixed_single_delta_fit.png
+├── fixed_transfer_amplitude_error.png
+├── fixed_transfer_time_error.png
+├── objective_signal_events.png
+├── transformer_ab_branch.png
+├── transformer_amplitude_branch.png
+├── transformer_coefficient_results.png
+├── transformer_error_summary.png
+├── transformer_layer_legend.png
+├── transformer_shared_block.png
+└── transformer_t0_branch.png
 ```
