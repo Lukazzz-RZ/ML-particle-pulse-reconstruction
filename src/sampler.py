@@ -88,13 +88,18 @@ def Generar_Datos_Etiquetados(n: int, min_d: int = 1, max_d: int = 8, mut: float
 ###### CAPAS Y PÉRDIDAS ######
 
 class Clip(layers.Layer):
-    def __init__(self, vmin, vmax, **kw):
+    def __init__(self, vmin=T_MIN, vmax=T_MAX, **kw):
         super().__init__(**kw)
         self.vmin = vmin
         self.vmax = vmax
 
     def call(self, x):
         return tf.clip_by_value(x, self.vmin, self.vmax)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"vmin": self.vmin, "vmax": self.vmax})
+        return config
 
 def mse_sin_padding(y_true, y_pred):
     return tf.reduce_mean(tf.square(y_true - y_pred))
@@ -353,88 +358,89 @@ if __name__ == "__main__":
     print("\nCSV guardado en:", csv_path)
 
 
-##### GRAFICADO SECUENCIAL #####
+if __name__ == "__main__":
+    ##### GRAFICADO SECUENCIAL #####
 
-plt.rcParams["font.size"] = 14  
-a_real, a_pred, b_real, b_pred = [], [], [], []
+    plt.rcParams["font.size"] = 14  
+    a_real, a_pred, b_real, b_pred = [], [], [], []
 
-for r in resumen:
-    for ar, ap, br, bp in zip(r["a_real"], r["a_pred"],
-                              r["b_real"], r["b_pred"]):
-        if ar > 0 and br > 0:      # descarta padding (-1)
-            a_real.append(ar);  a_pred.append(ap)
-            b_real.append(br);  b_pred.append(bp)
+    for r in resumen:
+        for ar, ap, br, bp in zip(r["a_real"], r["a_pred"],
+                                  r["b_real"], r["b_pred"]):
+            if ar > 0 and br > 0:      # descarta padding (-1)
+                a_real.append(ar);  a_pred.append(ap)
+                b_real.append(br);  b_pred.append(bp)
 
-idx_a = np.arange(len(a_real))
-idx_b = np.arange(len(b_real))
+    idx_a = np.arange(len(a_real))
+    idx_b = np.arange(len(b_real))
 
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5), sharey=False)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5), sharey=False)
 
-# ---- coeficiente a
-ax1.bar(idx_a, a_real, color="tab:blue", alpha=0.4, width=0.7, label="a real")
+    # ---- coeficiente a
+    ax1.bar(idx_a, a_real, color="tab:blue", alpha=0.4, width=0.7, label="a real")
 
-ax1.plot(idx_a, a_pred, "x", color="tab:red", markersize=7, label="a predicho")
-ax1.set_title("Coeficiente a – real (barra) vs. predicho (x)")
-ax1.set_xlabel("Índice de pulso válido")
-ax1.set_ylabel("Valor de a")
-ax1.legend(loc="lower left")
+    ax1.plot(idx_a, a_pred, "x", color="tab:red", markersize=7, label="a predicho")
+    ax1.set_title("Coeficiente a – real (barra) vs. predicho (x)")
+    ax1.set_xlabel("Índice de pulso válido")
+    ax1.set_ylabel("Valor de a")
+    ax1.legend(loc="lower left")
 
-ax1.grid(True)
+    ax1.grid(True)
 
-# Etiquetas en la base de las barras
-for i, val in zip(idx_b, b_real):
-    ax2.text(i - 0.3, 0.05, f"{val:.2f}", ha="left", va="bottom", fontsize=11, color="tab:green")
+    # Etiquetas en la base de las barras
+    for i, val in zip(idx_b, b_real):
+        ax2.text(i - 0.3, 0.05, f"{val:.2f}", ha="left", va="bottom", fontsize=11, color="tab:green")
 
-ax2.set_title("Coeficiente b – real (barra) vs. predicho (x)")
-ax2.set_xlabel("Índice de pulso válido")
-ax2.set_ylabel("Valor de b")
-ax2.legend(loc="lower left")
-ax2.grid(True)
+    ax2.set_title("Coeficiente b – real (barra) vs. predicho (x)")
+    ax2.set_xlabel("Índice de pulso válido")
+    ax2.set_ylabel("Valor de b")
+    ax2.legend(loc="lower left")
+    ax2.grid(True)
 
-# ---- coeficiente b
-ax2.bar(idx_b, b_real, color="tab:green", alpha=0.4, width=0.7, label="b real")
-ax2.plot(idx_b, b_pred, "x", color="tab:orange", markersize=7, label="b predicho")
-ax2.set_title("Coeficiente b – real (barra) vs. predicho (x)")
-ax2.set_xlabel("Índice de pulso válido")
-ax2.set_ylabel("Valor de b")
-ax2.legend()
-ax2.grid(True)
+    # ---- coeficiente b
+    ax2.bar(idx_b, b_real, color="tab:green", alpha=0.4, width=0.7, label="b real")
+    ax2.plot(idx_b, b_pred, "x", color="tab:orange", markersize=7, label="b predicho")
+    ax2.set_title("Coeficiente b – real (barra) vs. predicho (x)")
+    ax2.set_xlabel("Índice de pulso válido")
+    ax2.set_ylabel("Valor de b")
+    ax2.legend()
+    ax2.grid(True)
 
-plt.tight_layout()
-plt.show()
+    plt.tight_layout()
+    plt.show()
 
-# ----------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------
 
-a_real, a_pred, b_real, b_pred = [], [], [], []
+    a_real, a_pred, b_real, b_pred = [], [], [], []
 
-plt.rcParams["font.size"] = 16
-plt.rcParams["axes.grid"] = True
+    plt.rcParams["font.size"] = 16
+    plt.rcParams["axes.grid"] = True
 
-err_t, err_A = [], []
-for r in resumen:
-    # tiempos
-    t_r, t_p = np.array(r["t_real"]), np.array(r["t_pred"])
-    n = min(len(t_r), len(t_p))
-    err_t.append(np.sum(np.abs(t_r[:n] - t_p[:n])))
+    err_t, err_A = [], []
+    for r in resumen:
+        # tiempos
+        t_r, t_p = np.array(r["t_real"]), np.array(r["t_pred"])
+        n = min(len(t_r), len(t_p))
+        err_t.append(np.sum(np.abs(t_r[:n] - t_p[:n])))
 
-    # amplitudes
-    A_r, A_p = np.array(r["A_real"]), np.array(r["A_pred"])
-    nA = min(len(A_r), len(A_p))
-    err_A.append(np.sum(np.abs(A_r[:nA] - A_p[:nA])))
+        # amplitudes
+        A_r, A_p = np.array(r["A_real"]), np.array(r["A_pred"])
+        nA = min(len(A_r), len(A_p))
+        err_A.append(np.sum(np.abs(A_r[:nA] - A_p[:nA])))
 
-fig, ax = plt.subplots(1, 2, figsize=(13, 4), sharex=True)
+    fig, ax = plt.subplots(1, 2, figsize=(13, 4), sharex=True)
 
-ax[0].plot(err_t, marker="o", lw=1.5)
-ax[0].set_title("Σ |Δt| por señal")
-ax[0].set_xlabel("Índice de señal")
-ax[0].set_ylabel("Error total en muestras")
+    ax[0].plot(err_t, marker="o", lw=1.5)
+    ax[0].set_title("Σ |Δt| por señal")
+    ax[0].set_xlabel("Índice de señal")
+    ax[0].set_ylabel("Error total en muestras")
 
-ax[1].plot(err_A, marker="x", color="tab:orange", lw=1.5)
-ax[1].set_title("Σ |ΔA| por señal")
-ax[1].set_xlabel("Índice de señal")
-ax[1].set_ylabel("Error total en amplitud")
+    ax[1].plot(err_A, marker="x", color="tab:orange", lw=1.5)
+    ax[1].set_title("Σ |ΔA| por señal")
+    ax[1].set_xlabel("Índice de señal")
+    ax[1].set_ylabel("Error total en amplitud")
 
-plt.tight_layout()
-plt.show()
+    plt.tight_layout()
+    plt.show()
 
-# ----------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------
