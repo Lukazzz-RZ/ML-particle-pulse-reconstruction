@@ -92,11 +92,11 @@ measured signal = detector response * event sequence + noise
 
 The objective is to infer the original events from the convoluted detector signal.
 
-![Convolved signal problem](figures/convolved_signal_problem.png)
+![Convolved signal problem](../figures/convolved_signal_problem.png)
 
 A reconstructed event sequence should identify where the underlying pulses are located and estimate their amplitudes.
 
-![Objective signal and events](figures/objective_signal_events.png)
+![Objective signal and events](../figures/objective_signal_events.png)
 
 ---
 
@@ -208,7 +208,7 @@ The first stage assumes that the detector transfer function is fixed and known.
 
 Under this assumption, the problem becomes much simpler. A first fit assuming a single event is used to estimate the center and scale of the group of pulses.
 
-![Fixed single-delta fit](figures/fixed_single_delta_fit.png)
+![Fixed single-delta fit](../figures/fixed_single_delta_fit.png)
 
 Once a compact time window is defined, the problem can be written as a linear system:
 
@@ -234,11 +234,11 @@ For the fixed transfer function, the reconstruction can be solved with high prec
 
 The timing reconstruction error is essentially negligible in the controlled synthetic scenario.
 
-![Fixed transfer timing error](figures/fixed_transfer_time_error.png)
+![Fixed transfer timing error](../figures/fixed_transfer_time_error.png)
 
 The amplitude reconstruction error is also very small.
 
-![Fixed transfer amplitude error](figures/fixed_transfer_amplitude_error.png)
+![Fixed transfer amplitude error](../figures/fixed_transfer_amplitude_error.png)
 
 This method has clear advantages:
 
@@ -288,11 +288,11 @@ The first neural approach is an Encoder-Decoder-Regressor model.
 
 The encoder compresses the original waveform into a lower-dimensional representation.
 
-![EDR encoder](figures/edr_encoder.png)
+![EDR encoder](../figures/edr_encoder.png)
 
 The decoder reconstructs the compressed signal, forming an autoencoder together with the encoder.
 
-![EDR decoder](figures/edr_decoder.png)
+![EDR decoder](../figures/edr_decoder.png)
 
 A regression head then uses the latent representation to predict the event parameters.
 
@@ -306,19 +306,19 @@ The EDR model is first tested in a simpler scenario with fixed `a` and `b`.
 
 For this case, the model performs reasonably well.
 
-![EDR fixed delta count error](figures/edr_fixed_delta_count_error.png)
+![EDR fixed delta count error](../figures/edr_fixed_delta_count_error.png)
 
 The class-wise behavior gives additional information about how well the model predicts the number of events.
 
-![EDR fixed class accuracy](figures/edr_fixed_class_accuracy.png)
+![EDR fixed class accuracy](../figures/edr_fixed_class_accuracy.png)
 
 However, when the transfer-function parameters are allowed to vary, the EDR approach becomes less reliable.
 
-![EDR variable delta count error](figures/edr_variable_delta_count_error.png)
+![EDR variable delta count error](../figures/edr_variable_delta_count_error.png)
 
 In the variable-transfer-function case, the model tends to predict the maximum allowed number of pulses. This behavior suggests that a more specialized architecture is needed.
 
-![EDR variable confusion matrix](figures/edr_variable_confusion_matrix.png)
+![EDR variable confusion matrix](../figures/edr_variable_confusion_matrix.png)
 
 This leads to the development of the specialist Transformer model.
 
@@ -332,11 +332,11 @@ The idea is to start from a shared waveform encoder and then separate the predic
 
 The shared block processes the input signal and extracts a common representation.
 
-![Transformer shared block](figures/transformer_shared_block.png)
+![Transformer shared block](../figures/transformer_shared_block.png)
 
 The layer legend for the architecture diagrams is:
 
-![Transformer layer legend](figures/transformer_layer_legend.png)
+![Transformer layer legend](../figures/transformer_layer_legend.png)
 
 The model then separates the prediction into branches.
 
@@ -344,19 +344,19 @@ The model then separates the prediction into branches.
 
 The `t0` branch focuses on event arrival times.
 
-![Transformer t0 branch](figures/transformer_t0_branch.png)
+![Transformer t0 branch](../figures/transformer_t0_branch.png)
 
 ### Amplitude branch
 
 The amplitude branch predicts how the total signal amplitude is distributed across candidate pulses.
 
-![Transformer amplitude branch](figures/transformer_amplitude_branch.png)
+![Transformer amplitude branch](../figures/transformer_amplitude_branch.png)
 
 ### Shape-parameter branch
 
 The `a,b` branch predicts the transfer-function coefficients.
 
-![Transformer ab branch](figures/transformer_ab_branch.png)
+![Transformer ab branch](../figures/transformer_ab_branch.png)
 
 This specialist design is motivated by the fact that each output group has different numerical constraints and different physical meaning.
 
@@ -376,7 +376,7 @@ T_MIN <= t0 <= T_MAX
 
 This is implemented using a clipped activation.
 
-![Clip activation](figures/activation_clip_t0.png)
+![Clip activation](../figures/activation_clip_t0.png)
 
 ### Amplitudes
 
@@ -384,7 +384,7 @@ Amplitudes are positive and must be distributed among candidate pulses.
 
 A softmax-like activation is used to assign relative amplitude weights.
 
-![Softmax activation](figures/activation_softmax_amplitude.png)
+![Softmax activation](../figures/activation_softmax_amplitude.png)
 
 ### Transfer-function parameters
 
@@ -392,7 +392,7 @@ The coefficients `a` and `b` vary in a small controlled interval.
 
 A sigmoid-based activation is appropriate because it maps outputs smoothly into a bounded range.
 
-![Sigmoid activation](figures/activation_sigmoid_ab.png)
+![Sigmoid activation](../figures/activation_sigmoid_ab.png)
 
 These constraints keep the predictions inside physically meaningful regions and reduce invalid reconstructions.
 
@@ -429,13 +429,13 @@ N_max = 10
 
 The prediction errors for time and amplitude are analyzed signal by signal.
 
-![Transformer error summary](figures/transformer_error_summary.png)
+![Transformer error summary](../figures/transformer_error_summary.png)
 
 The results show that timing reconstruction is accurate, while amplitude reconstruction remains more difficult.
 
 The transfer-function coefficients `a` and `b` are reconstructed with small residuals.
 
-![Transformer coefficient results](figures/transformer_coefficient_results.png)
+![Transformer coefficient results](../figures/transformer_coefficient_results.png)
 
 The main result is:
 
