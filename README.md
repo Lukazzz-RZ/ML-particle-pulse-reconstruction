@@ -27,11 +27,23 @@ For the full scientific discussion, intermediate models and additional plots, se
 
 ## Getting started
 
-Use a Python installation compatible with TensorFlow, preferably within a virtual environment. From the repository root:
+The saved Keras checkpoint was successfully loaded and used for a one-waveform synthetic reconstruction test on **Python 3.11 with TensorFlow CPU 2.16.2**. These are useful starting versions for reproducing the check.
+
+From the repository root, in a Python 3.11 virtual environment:
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install "tensorflow==2.16.2" "numpy<2" -r requirements.txt
 ```
+
+### Verify the saved model
+
+```bash
+python -m scripts.check_model
+```
+
+This short check loads `models/best_model.keras`, performs one prediction and one bounded refinement step, and verifies finite reconstructed samples. It is also run automatically by [GitHub Actions](.github/workflows/model-smoke-test.yml). **Passing this smoke test does not establish reconstruction accuracy or validate results on real detector data.**
+
+### Run the full synthetic demonstration
 
 To run inference and numerical refinement using the bundled Keras checkpoint:
 
@@ -51,7 +63,7 @@ Training generates a large synthetic dataset and can require significant memory 
 python src/transformer_model.py --resume
 ```
 
-The provided dependency list is **not a version-pinned lockfile**. Compatibility with pretrained `.keras` models can depend on your TensorFlow/Keras version.
+The dependency list itself is **not a version-pinned lockfile**. The installation command above selects the TensorFlow version verified by the automated smoke test. Other TensorFlow/Keras versions may require changes.
 
 ## Main files
 
